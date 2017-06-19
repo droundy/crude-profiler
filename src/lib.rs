@@ -43,6 +43,7 @@ lazy_static! {
     static ref PROFILE: Mutex<Profile> = Mutex::new(Profile::new());
 }
 
+/// A `Guard` causes a task to end when it is dropped.
 pub struct Guard {
 }
 
@@ -56,6 +57,8 @@ impl Drop for Guard {
     }
 }
 
+/// Push a task to the stack of tasks.  The task will continue until
+/// the `Guard` is dropped.
 pub fn push(task: &'static str) -> Guard {
     let now = std::time::Instant::now();
     let mut m = PROFILE.lock().unwrap();
@@ -64,6 +67,7 @@ pub fn push(task: &'static str) -> Guard {
     Guard {}
 }
 
+/// Replace the last task pushed with a new one.
 pub fn replace(task: &'static str) -> Guard {
     let now = std::time::Instant::now();
     let mut m = PROFILE.lock().unwrap();
@@ -72,6 +76,7 @@ pub fn replace(task: &'static str) -> Guard {
     Guard {}
 }
 
+/// Forget any prior timings.
 pub fn clear() {
     let mut m = PROFILE.lock().unwrap();
     m.times = HashMap::new();
@@ -92,6 +97,7 @@ fn duration_to_f64(t: std::time::Duration) -> f64 {
     t.as_secs() as f64 + (t.subsec_nanos() as f64)*1e-9
 }
 
+/// Create a string that holds a report of time used.
 pub fn report() -> String {
     let now = std::time::Instant::now();
     let mut m = PROFILE.lock().unwrap();
@@ -130,7 +136,6 @@ mod tests {
         assert!(rep.contains("hello world"));
     }
     #[test]
-
     fn nesting() {
         clear();
         let _a = push("hello");
@@ -138,5 +143,16 @@ mod tests {
         let rep = report();
         println!("{}", rep);
         assert!(rep.contains("hello:world"));
+    }
+    #[test]
+    fn replace_works() {
+        clear();
+        let _a = push("hello");
+        let _b = replace("world");
+        let rep = report();
+        println!("{}", rep);
+        assert!(!rep.contains("hello:world"));
+        assert!(rep.contains("world"));
+        assert!(rep.contains("hello"));
     }
 }
