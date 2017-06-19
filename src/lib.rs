@@ -11,6 +11,18 @@ struct Profile {
     started: std::time::Instant,
 }
 
+fn add_to_map<K: std::hash::Hash + std::cmp::Eq>(m: &mut HashMap<K, std::time::Duration>,
+                                                 k: K, d: std::time::Duration) {
+    match m.entry(k) {
+        Entry::Occupied(mut o) => {
+            *o.get_mut() += d;
+        },
+        Entry::Vacant(v) => {
+            v.insert(d);
+        },
+    }
+}
+
 impl Profile {
     fn new() -> Profile {
         Profile {
@@ -22,14 +34,7 @@ impl Profile {
     fn add_time(&mut self, now: std::time::Instant) {
         if now > self.started {
             let d = now.duration_since(self.started);
-            match self.times.entry(self.stack.clone()) {
-                Entry::Occupied(mut o) => {
-                    *o.get_mut() += d;
-                },
-                Entry::Vacant(v) => {
-                    v.insert(d);
-                },
-            }
+            add_to_map(&mut self.times, self.stack.clone(), d);
         }
     }
 }
@@ -94,9 +99,21 @@ pub fn report() -> String {
     let mut out = String::new();
     let mut keys: Vec<_> = m.times.keys().collect();
     keys.sort();
-    for k in keys {
-        out.push_str(&pretty_stack(k));
-        out.push_str(&format!(" {}\n", duration_to_f64(m.times[k])));
+    let mut cum: HashMap<&'static str, std::time::Duration> = HashMap::new();
+    for &k in keys.iter() {
+        for &s in k.iter() {
+            add_to_map(&mut cum, s, m.times[k]);
+        }
+    }
+    let mut shortkeys: Vec<_> = cum.keys().collect();
+    shortkeys.sort();
+    for s in shortkeys {
+        out.push_str(&format!("{}: cumulative {}\n", &s, duration_to_f64(cum[s])));
+        for &k in keys.iter().filter(|&k| k.contains(s)) {
+            out.push_str(&format!("    {} {}\n",
+                                  &pretty_stack(k),
+                                  duration_to_f64(m.times[k])));
+        }
     }
     out
 }
