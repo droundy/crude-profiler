@@ -1,6 +1,6 @@
 [package]
 name = "crude-profiler"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["David Roundy <roundyd@physics.oregonstate.edu>"]
 description = "simple library for crude manual profiling"
 license = "GPL-2.0+"

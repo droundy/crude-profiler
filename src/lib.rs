@@ -56,6 +56,17 @@ impl Drop for Guard {
     }
 }
 
+impl Guard {
+    /// Replace the last task pushed with a new one.
+    pub fn replace(&self, task: &'static str) {
+        let now = std::time::Instant::now();
+        let mut m = PROFILE.lock().unwrap();
+        m.add_time(now);
+        m.stack.pop();
+        m.stack.push(task);
+    }
+}
+
 /// Push a task to the stack of tasks.  The task will continue until
 /// the `Guard` is dropped.
 pub fn push(task: &'static str) -> Guard {
@@ -63,15 +74,6 @@ pub fn push(task: &'static str) -> Guard {
     let mut m = PROFILE.lock().unwrap();
     m.add_time(now);
     m.stack.push(task);
-    Guard {}
-}
-
-/// Replace the last task pushed with a new one.
-pub fn replace(task: &'static str) -> Guard {
-    let now = std::time::Instant::now();
-    let mut m = PROFILE.lock().unwrap();
-    m.add_time(now);
-    m.stack = vec![task];
     Guard {}
 }
 
@@ -118,8 +120,6 @@ pub fn report() -> String {
     shortkeys.sort();
     let total_f64 = duration_to_f64(total_time);
     for s in shortkeys {
-        let percent = 100.0*duration_to_f64(cum[s])/total_f64;
-        out.push_str(&format!("{:.1}% {}: {}\n", percent, &s, duration_to_f64(cum[s])));
         let mut ways: HashMap<Vec<&'static str>, std::time::Duration> = HashMap::new();
         for &k in keys.iter().filter(|&k| k.contains(s)) {
             let mut vv = Vec::from(k.split(|&ss| ss == *s).next().unwrap());
@@ -128,7 +128,9 @@ pub fn report() -> String {
         }
         let mut waykeys: Vec<_> = ways.keys().collect();
         waykeys.sort();
+        let percent = 100.0*duration_to_f64(cum[s])/total_f64;
         if waykeys.len() > 1 {
+            out.push_str(&format!("{:.1}% {}: {}\n", percent, &s, duration_to_f64(cum[s])));
             for &k in waykeys.iter().filter(|&k| k.contains(s)) {
                 let percent = 100.0*duration_to_f64(ways[k])/total_f64;
                 out.push_str(&format!("    {:.1}% {} {}\n",
@@ -136,6 +138,9 @@ pub fn report() -> String {
                                       duration_to_f64(ways[k])));
             }
             out.push_str("\n");
+        } else {
+            out.push_str(&format!("{:.1}% {}: {}\n", percent, &pretty_stack(waykeys[0]),
+                                  duration_to_f64(cum[s])));
         }
     }
     out
@@ -155,8 +160,10 @@ mod tests {
     #[test]
     fn nesting() {
         clear();
-        let _a = push("hello");
-        let _b = push("world");
+        {
+            let _a = push("hello");
+            let _b = push("world");
+        }
         let rep = report();
         println!("\n{}", rep);
         assert!(rep.contains("hello:world"));
@@ -164,12 +171,22 @@ mod tests {
     #[test]
     fn replace_works() {
         clear();
-        let _a = push("hello");
-        let _b = replace("world");
+        {
+            let _a = push("first");
+            let _b = push("greet");
+            _b.replace("world");
+        }
+        {
+            let _a = push("second");
+            let _b = push("greet");
+            _b.replace("world");
+        }
         let rep = report();
         println!("\n{}", rep);
         assert!(!rep.contains("hello:world"));
-        assert!(rep.contains("world"));
-        assert!(rep.contains("hello"));
+        assert!(rep.contains("first:world"));
+        assert!(rep.contains("first:greet"));
+        assert!(rep.contains("second:world"));
+        assert!(rep.contains("second:greet"));
     }
 }
