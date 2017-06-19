@@ -53,7 +53,6 @@ impl Drop for Guard {
         let mut m = PROFILE.lock().unwrap();
         m.add_time(now);
         m.stack.pop();
-        println!("drop");
     }
 }
 
