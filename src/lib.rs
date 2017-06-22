@@ -162,7 +162,7 @@ fn duration_to_f64(t: std::time::Duration) -> f64 {
 
 fn pretty_time(t: f64) -> String {
     if t < 1e-7 {
-        format!("{:.2} ns", t(1e9)
+        format!("{:.2} ns", t*1e9)
     } else if t < 1e-4 {
         format!("{:.2} us", t*1e6)
     } else if t < 1e-2 {
