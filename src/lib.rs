@@ -162,11 +162,11 @@ fn duration_to_f64(t: std::time::Duration) -> f64 {
 
 fn pretty_time(t: f64) -> String {
     if t < 1e-7 {
-        format!("{:.2} ns", t/1e-9)
+        format!("{:.2} ns", t(1e9)
     } else if t < 1e-4 {
-        format!("{:.2} us", t/1e-6)
+        format!("{:.2} us", t*1e6)
     } else if t < 1e-2 {
-        format!("{:.2} ms", t/1e-3)
+        format!("{:.2} ms", t*1e3)
     } else if t >= 1e2 {
         format!("{:.2e} s", t)
     } else {
@@ -214,20 +214,20 @@ pub fn report() -> String {
         waykeys.reverse();
         let percent = 100.0*duration_to_f64(cum[s])/total_f64;
         if waykeys.len() > 1 {
-            out.push_str(&format!("{:4.1}% {} {:.1}s ({}, {})\n",
+            out.push_str(&format!("{:4.1}% {} {} ({}, {})\n",
                                   percent, &s,
                                   pretty_time(duration_to_f64(cum[s])), cumcount[s],
                                   pretty_time(duration_to_f64(cum[s])/cumcount[s] as f64)));
             for &k in waykeys.iter().filter(|&k| k.contains(s)) {
                 let percent = 100.0*duration_to_f64(ways[k])/total_f64;
-                out.push_str(&format!("      {:4.1}% {} {:.1}s ({}, {})\n",
+                out.push_str(&format!("      {:4.1}% {} {} ({}, {})\n",
                                       percent, &pretty_stack(k),
                                       pretty_time(duration_to_f64(ways[k])),
                                       wayscount[k],
                                       pretty_time(duration_to_f64(ways[k])/wayscount[k] as f64)));
             }
         } else {
-            out.push_str(&format!("{:4.1}% {} {:.1}s ({}, {})\n", percent,
+            out.push_str(&format!("{:4.1}% {} {} ({}, {})\n", percent,
                                   &pretty_stack(waykeys[0]),
                                   pretty_time(duration_to_f64(cum[s])),
                                   cumcount[s],
