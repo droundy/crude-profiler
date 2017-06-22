@@ -31,6 +31,7 @@ use std::collections::hash_map::{Entry};
 
 struct Profile {
     times: HashMap<Vec<&'static str>, std::time::Duration>,
+    counts: HashMap<Vec<&'static str>, usize>,
     stack: Vec<&'static str>,
     started: std::time::Instant,
 }
@@ -46,11 +47,23 @@ fn add_to_map<K: std::hash::Hash + std::cmp::Eq>(m: &mut HashMap<K, std::time::D
         },
     }
 }
+fn increment_map<K: std::hash::Hash + std::cmp::Eq>(m: &mut HashMap<K, usize>,
+                                                    k: K, n: usize) {
+    match m.entry(k) {
+        Entry::Occupied(mut o) => {
+            *o.get_mut() += n;
+        },
+        Entry::Vacant(v) => {
+            v.insert(n);
+        },
+    }
+}
 
 impl Profile {
     fn new() -> Profile {
         Profile {
             times: HashMap::new(),
+            counts: HashMap::new(),
             started: std::time::Instant::now(),
             stack: Vec::new(),
         }
@@ -99,6 +112,8 @@ impl Guard {
         m.add_time(now);
         m.stack.pop();
         m.stack.push(task);
+        let st = m.stack.clone();
+        increment_map(&mut m.counts, st, 1);
         m.started = std::time::Instant::now();
     }
 }
@@ -117,6 +132,8 @@ pub fn push(task: &'static str) -> Guard {
     let mut m = PROFILE.lock().unwrap();
     m.add_time(now);
     m.stack.push(task);
+    let st = m.stack.clone();
+    increment_map(&mut m.counts, st, 1);
     m.started = std::time::Instant::now();
     Guard {}
 }
@@ -125,6 +142,7 @@ pub fn push(task: &'static str) -> Guard {
 pub fn clear() {
     let mut m = PROFILE.lock().unwrap();
     m.times = HashMap::new();
+    m.counts = HashMap::new();
     m.stack = Vec::new();
     m.started = std::time::Instant::now();
 }
@@ -142,6 +160,20 @@ fn duration_to_f64(t: std::time::Duration) -> f64 {
     t.as_secs() as f64 + (t.subsec_nanos() as f64)*1e-9
 }
 
+fn pretty_time(t: f64) -> String {
+    if t < 1e-7 {
+        format!("{:.2} ns", t/1e-9)
+    } else if t < 1e-4 {
+        format!("{:.2} us", t/1e-6)
+    } else if t < 1e-2 {
+        format!("{:.2} ms", t/1e-3)
+    } else if t >= 1e2 {
+        format!("{:.2e} s", t)
+    } else {
+        format!("{:.2} s", t)
+    }
+}
+
 /// Create a string that holds a report of time used.  This is
 /// currently the *only* way to extract timings data, so obviously it
 /// isn't very automation-friendly.
@@ -157,9 +189,11 @@ pub fn report() -> String {
     let mut keys: Vec<_> = m.times.keys().collect();
     keys.sort();
     let mut cum: HashMap<&'static str, std::time::Duration> = HashMap::new();
+    let mut cumcount: HashMap<&'static str, usize> = HashMap::new();
     for &k in keys.iter() {
         for &s in k.iter() {
             add_to_map(&mut cum, s, m.times[k]);
+            increment_map(&mut cumcount, s, m.counts[k]);
         }
     }
     let mut shortkeys: Vec<_> = cum.keys().collect();
@@ -168,27 +202,36 @@ pub fn report() -> String {
     let total_f64 = duration_to_f64(total_time);
     for s in shortkeys {
         let mut ways: HashMap<Vec<&'static str>, std::time::Duration> = HashMap::new();
+        let mut wayscount: HashMap<Vec<&'static str>, usize> = HashMap::new();
         for &k in keys.iter().filter(|&k| k.contains(s)) {
             let mut vv = Vec::from(k.split(|&ss| ss == *s).next().unwrap());
             vv.push(s);
-            add_to_map(&mut ways, vv, m.times[k]);
+            add_to_map(&mut ways, vv.clone(), m.times[k]);
+            increment_map(&mut wayscount, vv, m.counts[k]);
         }
         let mut waykeys: Vec<_> = ways.keys().collect();
         waykeys.sort_by_key(|&k| ways[k]);
         waykeys.reverse();
         let percent = 100.0*duration_to_f64(cum[s])/total_f64;
         if waykeys.len() > 1 {
-            out.push_str(&format!("{:4.1}% {} {:.1}s\n",
-                                  percent, &s, duration_to_f64(cum[s])));
+            out.push_str(&format!("{:4.1}% {} {:.1}s ({}, {})\n",
+                                  percent, &s,
+                                  pretty_time(duration_to_f64(cum[s])), cumcount[s],
+                                  pretty_time(duration_to_f64(cum[s])/cumcount[s] as f64)));
             for &k in waykeys.iter().filter(|&k| k.contains(s)) {
                 let percent = 100.0*duration_to_f64(ways[k])/total_f64;
-                out.push_str(&format!("      {:4.1}% {} {:.1}s\n",
+                out.push_str(&format!("      {:4.1}% {} {:.1}s ({}, {})\n",
                                       percent, &pretty_stack(k),
-                                      duration_to_f64(ways[k])));
+                                      pretty_time(duration_to_f64(ways[k])),
+                                      wayscount[k],
+                                      pretty_time(duration_to_f64(ways[k])/wayscount[k] as f64)));
             }
         } else {
-            out.push_str(&format!("{:4.1}% {} {:.1}s\n", percent,
-                                  &pretty_stack(waykeys[0]), duration_to_f64(cum[s])));
+            out.push_str(&format!("{:4.1}% {} {:.1}s ({}, {})\n", percent,
+                                  &pretty_stack(waykeys[0]),
+                                  pretty_time(duration_to_f64(cum[s])),
+                                  cumcount[s],
+                                  pretty_time(duration_to_f64(cum[s])/cumcount[s] as f64)));
         }
     }
     // out.push_str(&format!("{:?}", m.times));
